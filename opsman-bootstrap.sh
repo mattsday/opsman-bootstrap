@@ -130,8 +130,8 @@ wget_get() {
 # Download list of products
 get_product_list() {
 	echo Getting product list...
-#	PRODUCT_LIST=$(wget_get http://network.pivotal.io/api/v2/products)
-	PRODUCT_LIST=$(cat ~/.opsmgr/products)
+	PRODUCT_LIST=$(wget_get http://network.pivotal.io/api/v2/products)
+#	PRODUCT_LIST=$(cat ~/.opsmgr/products)
 	PRODUCT_LIST=$(echo $PRODUCT_LIST | jq '.products | .[] | {slug:.slug,releases:._links.releases.href}')
 }
 get_releases() {
