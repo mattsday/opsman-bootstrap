@@ -10,6 +10,7 @@ parse_cli() {
 	# Set defaults
 	SLUGS="elastic-runtime,p-spring-cloud-services,p-rabbitmq,p-mysql"
 	VERSIONS=""
+	IAAS=""
 
 	if [ "$#" = 0 ]; then
 		# No args, so just carry on
@@ -28,12 +29,27 @@ parse_cli() {
 			--slugs=*)
 				SLUGS=$(echo $i | sed 's/--slugs=//')
 				;;
+			--iaas=*)
+				IAAS=$(echo $i | sed 's/--iaas=//')
+				IAAS_COMPARE=$(echo $IAAS | tr '[:upper:]' '[:lower:]')
+				case "$IAAS_COMPARE" in
+					gcp)
+						IAAS="Google"
+						;;
+					vmware)
+						IAAS="vSphere"
+						;;
+			    esac
+				;;
 			--*)
 				VER=$(echo $i | sed 's/--//')
 				echo Setting $VER
 				VERSIONS=$VERSIONS:$VER
 		esac
 	done
+	if [ -z "$IAAS" ]; then
+		echo Warning: No IaaS specified via --iaas, stemcells may not install correctly
+	fi
 	echo Bootstrapping Cloud Foundry
 	echo Installing slugs: $SLUGS
 
@@ -83,11 +99,15 @@ setup() {
 		echo Instaling lynx
 		sudo apt-get update >/dev/null && sudo apt-get install -y lynx >/dev/null
 	fi
-	
+
 	# Create download directory
 	if [ ! -d "$HOME/opsmgr-downloads" ]; then
 		mkdir "$HOME/opsmgr-downloads"
 	fi
+}
+
+wget_download() {
+	wget -qO $2 --post-data="" --header="Authorization: Token RwvGHXjFTP1pSTZgTo4B" $1
 }
 
 wget_post() {
@@ -101,8 +121,8 @@ wget_get() {
 # Download list of products
 get_product_list() {
 	echo Getting product list...
-#	PRODUCT_LIST=$(wget_get http://network.pivotal.io/api/v2/products)
-	PRODUCT_LIST=$(cat ~/.opsmgr/products)
+	PRODUCT_LIST=$(wget_get http://network.pivotal.io/api/v2/products)
+#	PRODUCT_LIST=$(cat ~/.opsmgr/products)
 	PRODUCT_LIST=$(echo $PRODUCT_LIST | jq '.products | .[] | {slug:.slug,releases:._links.releases.href}')
 }
 get_releases() {
@@ -149,6 +169,7 @@ for slug in $SLUGS; do
 		fi
 	else
 		RELEASE=$(echo $RELEASES | jq '.releases | .[0] | {version:.version,eula:._links.eula_acceptance.href,files:._links.product_files.href}')
+		slug_version=$(echo $RELEASE | jq -r '.version')
 	fi
 	# Accept the EULA
 	EULA=$(echo $RELEASE | jq -r '.eula')
@@ -158,5 +179,52 @@ for slug in $SLUGS; do
 	FILES=$(echo $RELEASE | jq -r '.files')
 	get_files $FILES
 	# List files
-	echo $FILES | jq '.product_files | .[] | .name'
+	FILES=$(echo $FILES | jq '.product_files | .[]')
+	URL=""
+	FILENAME=""
+	VERSION=""
+	if [ "$slug" = "stemcells" ]; then
+		if [ ! -z "$IAAS" ]; then
+			STEMCELL=$(echo $FILES | jq 'select(.name | contains("'$IAAS'"))')
+			if [ -z "$STEMCELL" ]; then
+				echo Error: Cannot find stemcell for IaaS $IAAS - incorrect spelling\?
+				exit
+			fi
+			FILENAME=$(basename $(echo $STEMCELL | jq -r '.aws_object_key'))
+			URL=$(echo $STEMCELL | jq -r '._links.download.href')
+		fi
+	elif [ "$slug" = "elastic-runtime" ]; then
+		echo ERT
+		#TODO - add ERT stuff
+	else
+		# Assume whatever file matches .pivotal is the golden egg
+		TILE=$(echo $FILES | jq 'select(.aws_object_key | contains(".pivotal"))')
+		if [ -z "$TILE" ]; then
+			echo Error: Cannot find product $slug
+			exit
+		fi
+		FILENAME=$(basename $(echo $TILE | jq -r '.aws_object_key'))
+		URL=$(echo $TILE | jq -r '._links.download.href')
+	fi
+
+	if [ -z "$URL" ] || [ -z "$FILENAME" ]; then
+		echo Error - Cannot determine URL or filename for slug $slug
+		exit
+	fi
+	FILENAME="$HOME/opsmgr-downloads/$FILENAME"
+	echo Downloading $slug $slug_version
+	wget_download $URL $FILENAME
+
+	if [ "$slug" = "stemcells" ]; then
+		echo Installing stemcell $slug_version
+		om -k -u "$PCF_USER" -p "$PCF_PASSWD" -t "$PCF_OPSMGR" upload-stemcell -s "$FILENAME"
+	else
+		echo Installing $slug $slug_version
+		om -k -u "$PCF_USER" -p "$PCF_PASSWD" -t "$PCF_OPSMGR" upload-product -p "$FILENAME"
+	fi
+	#TODO - add this as an option to not do
+	echo Cleaning up...
+	rm "$FILENAME"
+
+#	echo $FILES | jq '.product_files | .[]'
 done
