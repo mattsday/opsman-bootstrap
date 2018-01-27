@@ -11,6 +11,7 @@ parse_cli() {
 	SLUGS="elastic-runtime,p-spring-cloud-services,p-rabbitmq,p-mysql"
 	VERSIONS=""
 	IAAS=""
+	CLEANUP="true"
 
 	if [ "$#" = 0 ]; then
 		# No args, so just carry on
@@ -19,12 +20,20 @@ parse_cli() {
 	for i in "$@"; do
 		case "$i" in
 			--help)
-				echo "Some kind of help"
+				echo Use $0 \[options\]
+				echo -e "\t--slugs=<slugs>\t\tInstall a comma separated list of slugs, e.g. elastic-runtime,p-mysql"
+	#			echo -e "\t--list-slugs\t\tGet a list of available slugs to install"
+				echo -e "\t--iaas=<iaas>\t\tTarget a given IaaS \(for stemcells\)"
+				echo -e "\t--<slug>=<ver>\t\tSpecify a version for a slug, e.g. --elastic-runtime=2.0.3"
+				echo -e "\t--no-cleanup\t\tDon't delete files afterwards"
 				exit
 				;;
 			--list-slugs)
 				echo "List slugs available"
 				exit
+				;;
+			--no-cleanup)
+				CLEANUP=false
 				;;
 			--slugs=*)
 				SLUGS=$(echo $i | sed 's/--slugs=//')
@@ -121,8 +130,8 @@ wget_get() {
 # Download list of products
 get_product_list() {
 	echo Getting product list...
-	PRODUCT_LIST=$(wget_get http://network.pivotal.io/api/v2/products)
-#	PRODUCT_LIST=$(cat ~/.opsmgr/products)
+#	PRODUCT_LIST=$(wget_get http://network.pivotal.io/api/v2/products)
+	PRODUCT_LIST=$(cat ~/.opsmgr/products)
 	PRODUCT_LIST=$(echo $PRODUCT_LIST | jq '.products | .[] | {slug:.slug,releases:._links.releases.href}')
 }
 get_releases() {
@@ -194,8 +203,15 @@ for slug in $SLUGS; do
 			URL=$(echo $STEMCELL | jq -r '._links.download.href')
 		fi
 	elif [ "$slug" = "elastic-runtime" ]; then
-		echo ERT
-		#TODO - add ERT stuff
+		# Avoid downloading the SRT
+		ERT=$(echo $FILES | jq 'select(.aws_object_key | contains("cf-"))')
+		ERT=$(echo $ERT | jq 'select(.aws_object_key | contains(".pivotal"))')
+		if [ -z "$ERT" ]; then
+			echo Error: Cannot find ERT download
+			exit
+		fi
+        FILENAME=$(basename $(echo $ERT | jq -r '.aws_object_key'))
+        URL=$(echo $ERT | jq -r '._links.download.href')
 	else
 		# Assume whatever file matches .pivotal is the golden egg
 		TILE=$(echo $FILES | jq 'select(.aws_object_key | contains(".pivotal"))')
@@ -222,9 +238,10 @@ for slug in $SLUGS; do
 		echo Installing $slug $slug_version
 		om -k -u "$PCF_USER" -p "$PCF_PASSWD" -t "$PCF_OPSMGR" upload-product -p "$FILENAME"
 	fi
-	#TODO - add this as an option to not do
-	echo Cleaning up...
-	rm "$FILENAME"
+	if [ "$CLEANUP" == true ]; then
+		echo Cleaning up...
+		rm "$FILENAME"
+	fi
 
 #	echo $FILES | jq '.product_files | .[]'
 done
