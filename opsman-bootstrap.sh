@@ -146,12 +146,6 @@ setup() {
 		sudo apt-get update >/dev/null && sudo apt-get install -y jq >/dev/null
 	fi
 
-	# Install lynx
-	if ! command -v lynx> /dev/null 2>&1; then
-		echo Instaling lynx
-		sudo apt-get update >/dev/null && sudo apt-get install -y lynx >/dev/null
-	fi
-
 	# Create download directory
 	if [ ! -d "$HOME/opsmgr-downloads" ]; then
 		mkdir "$HOME/opsmgr-downloads"
