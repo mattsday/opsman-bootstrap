@@ -5,6 +5,45 @@
 # (or some defaults) from Pivotal Network and uploads them
 # to ops manager. Doesn't configure them or anything.
 
+wget_download() {
+	wget -qO $2 --post-data="" --header="Authorization: Token RwvGHXjFTP1pSTZgTo4B" $1
+}
+
+wget_post() {
+	wget -qO- --post-data="" --header="Authorization: Token RwvGHXjFTP1pSTZgTo4B" $1
+}
+
+wget_get() {
+	wget -qO- --header="Authorization: Token RwvGHXjFTP1pSTZgTo4B" $1
+}
+
+# Download list of products
+get_product_list() {
+	if [ -z "$PRODUCT_LIST" ]; then
+		echo Getting product list...
+		PRODUCT_LIST=$(wget_get http://network.pivotal.io/api/v2/products)
+	#	PRODUCT_LIST=$(cat ~/.opsmgr/products)
+		PRODUCT_LIST=$(echo $PRODUCT_LIST | jq '.products | .[] | {slug:.slug,releases:._links.releases.href}')
+	fi
+}
+
+update_slug () {
+	unset SLUGS
+	INSTALLED=$(om --format=json -t $PCF_OPSMGR -k -u $PCF_USER -p $PCF_PASSWD available-products)
+	INSTALLED_NAMES=$(echo $INSTALLED | jq -r '.[] | .name' | tr '[:upper:]' '[:lower:]' | sort -u)
+	for i in $INSTALLED_NAMES; do
+		if [ "$i" = "cf" ]; then
+			i="elastic-runtime"
+		fi
+		SLUGS="$i,$SLUGS"
+	done
+}
+
+get_slug_list() {
+	get_product_list
+	echo $PRODUCT_LIST | jq -r '.slug'
+}
+
 # Interpret CLI arguments
 parse_cli() {
 	# Set defaults
@@ -22,15 +61,19 @@ parse_cli() {
 			--help)
 				echo Use $0 \[options\]
 				echo -e "\t--slugs=<slugs>\t\tInstall a comma separated list of slugs, e.g. elastic-runtime,p-mysql"
-	#			echo -e "\t--list-slugs\t\tGet a list of available slugs to install"
+				echo -e "\t--list-slugs\t\tGet a list of available slugs to install"
 				echo -e "\t--iaas=<iaas>\t\tTarget a given IaaS \(for stemcells\)"
 				echo -e "\t--<slug>=<ver>\t\tSpecify a version for a slug, e.g. --elastic-runtime=2.0.3"
 				echo -e "\t--no-cleanup\t\tDon't delete files afterwards"
 				exit
 				;;
 			--list-slugs)
-				echo "List slugs available"
+				get_slug_list
 				exit
+				;;
+			--update)
+				echo Updating installed slugs
+				update_slug
 				;;
 			--no-cleanup)
 				CLEANUP=false
@@ -115,25 +158,6 @@ setup() {
 	fi
 }
 
-wget_download() {
-	wget -qO $2 --post-data="" --header="Authorization: Token RwvGHXjFTP1pSTZgTo4B" $1
-}
-
-wget_post() {
-	wget -qO- --post-data="" --header="Authorization: Token RwvGHXjFTP1pSTZgTo4B" $1
-}
-
-wget_get() {
-	wget -qO- --header="Authorization: Token RwvGHXjFTP1pSTZgTo4B" $1
-}
-
-# Download list of products
-get_product_list() {
-	echo Getting product list...
-	PRODUCT_LIST=$(wget_get http://network.pivotal.io/api/v2/products)
-#	PRODUCT_LIST=$(cat ~/.opsmgr/products)
-	PRODUCT_LIST=$(echo $PRODUCT_LIST | jq '.products | .[] | {slug:.slug,releases:._links.releases.href}')
-}
 get_releases() {
 	RELEASES=$(wget_get $1)
 }
