@@ -19,10 +19,12 @@ wget_get() {
 
 # Download list of products
 get_product_list() {
-	if [ -z "$PRODUCT_LIST" ]; then
+	if [ "$CACHE" = 1 ] && [ -f "$DOWNLOAD_DIR/.product_cache" ]; then
+		PRODUCT_LIST=$(cat "$DOWNLOAD_DIR/.product_cache" | jq '.products | .[] | {slug:.slug,releases:._links.releases.href}')
+	elif [ -z "$PRODUCT_LIST" ]; then
 		echo Getting product list...
 		PRODUCT_LIST=$(wget_get http://network.pivotal.io/api/v2/products)
-	#	PRODUCT_LIST=$(cat ~/.opsmgr/products)
+		echo $PRODUCT_LIST > "$DOWNLOAD_DIR/.product_cache"
 		PRODUCT_LIST=$(echo $PRODUCT_LIST | jq '.products | .[] | {slug:.slug,releases:._links.releases.href}')
 	fi
 }
@@ -51,6 +53,7 @@ parse_cli() {
 	VERSIONS=""
 	IAAS=""
 	CLEANUP="true"
+	DOWNLOAD_DIR="$HOME/.opsmgr-downloads"
 
 	if [ "$#" = 0 ]; then
 		# No args, so just carry on
@@ -64,8 +67,12 @@ parse_cli() {
 				echo -e "\t--list-slugs\t\tGet a list of available slugs to install"
 				echo -e "\t--iaas=<iaas>\t\tTarget a given IaaS \(for stemcells\)"
 				echo -e "\t--<slug>=<ver>\t\tSpecify a version for a slug, e.g. --elastic-runtime=2.0.3"
+				echo -e "\t--cache\t\t\tUse a cached version of the product list"
 				echo -e "\t--no-cleanup\t\tDon't delete files afterwards"
 				exit
+				;;
+			--cache)
+				CACHE=1
 				;;
 			--list-slugs)
 				get_slug_list
@@ -147,8 +154,8 @@ setup() {
 	fi
 
 	# Create download directory
-	if [ ! -d "$HOME/opsmgr-downloads" ]; then
-		mkdir "$HOME/opsmgr-downloads"
+	if [ ! -d "$DOWNLOAD_DIR" ]; then
+		mkdir "$DOWNLOAD_DIR"
 	fi
 }
 
@@ -245,7 +252,7 @@ for slug in $SLUGS; do
 		echo Error - Cannot determine URL or filename for slug $slug
 		exit
 	fi
-	FILENAME="$HOME/opsmgr-downloads/$FILENAME"
+	FILENAME="$HOME/$DOWNLOAD_DIR/$FILENAME"
 	echo Downloading $slug $slug_version
 	wget_download $URL $FILENAME
 
