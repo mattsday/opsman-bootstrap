@@ -252,7 +252,7 @@ for slug in $SLUGS; do
 		echo Error - Cannot determine URL or filename for slug $slug
 		exit
 	fi
-	FILENAME="$HOME/$DOWNLOAD_DIR/$FILENAME"
+	FILENAME="$DOWNLOAD_DIR/$FILENAME"
 	echo Downloading $slug $slug_version
 	wget_download $URL $FILENAME
 
