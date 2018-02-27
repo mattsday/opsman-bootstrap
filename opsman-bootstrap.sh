@@ -68,7 +68,14 @@ parse_cli() {
 				echo -e "\t--iaas=<iaas>\t\tTarget a given IaaS \(for stemcells\)"
 				echo -e "\t--<slug>=<ver>\t\tSpecify a version for a slug, e.g. --elastic-runtime=2.0.3"
 				echo -e "\t--cache\t\t\tUse a cached version of the product list"
+				echo -e "\t--update-cache\t\tUpdate the cache"
 				echo -e "\t--no-cleanup\t\tDon't delete files afterwards"
+				exit
+				;;
+			--update-cache)
+				echo Updating cache
+				CACHE=0
+				get_product_list
 				exit
 				;;
 			--cache)
