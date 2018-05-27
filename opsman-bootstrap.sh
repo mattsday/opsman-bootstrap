@@ -6,15 +6,15 @@
 # to ops manager. Doesn't configure them or anything.
 
 wget_download() {
-	wget --limit-rate 10M -qO $2 --post-data="" --header="Authorization: Token RwvGHXjFTP1pSTZgTo4B" $1
+	wget --limit-rate 10M -qO $2 --post-data="" --header="Authorization: Token $PIVNET_API_KEY" $1
 }
 
 wget_post() {
-	wget --limit-rate 10M -qO- --post-data="" --header="Authorization: Token RwvGHXjFTP1pSTZgTo4B" $1
+	wget --limit-rate 10M -qO- --post-data="" --header="Authorization: Token $PIVNET_API_KEY" $1
 }
 
 wget_get() {
-	wget --limit-rate 10M -qO- --header="Authorization: Token RwvGHXjFTP1pSTZgTo4B" $1
+	wget --limit-rate 10M -qO- --header="Authorization: Token $PIVNET_API_KEY" $1
 }
 
 # Download list of products
